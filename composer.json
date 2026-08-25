@@ -1,0 +1,66 @@
+{
+    "name": "particle-academy/prism-mcp",
+    "description": "Model Context Protocol for Prism — consume remote MCP tools as Prism tools, across a trust boundary you can see.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "ai", "agents", "llm", "prism", "mcp", "model-context-protocol"],
+    "authors": [
+        {
+            "name": "Wish Born",
+            "email": "wish@impact.do"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "laravel/framework": "^12.61.1|^13.12.0",
+        "particle-academy/prism": ">=0.114 <1.0"
+    },
+    "replace": {
+        "prism-php/relay": "*"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.30",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "suggest": {
+        "particle-academy/laravel-fms": "Gate remote MCP tools on Fancy's Feature Management System (FeatureGate).",
+        "laravel/mcp": "Expose your own application's tools over MCP. prism-mcp consumes servers; laravel/mcp serves them."
+    },
+    "autoload": {
+        "psr-4": {
+            "Prism\\Mcp\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "@php vendor/bin/pest",
+        "types": "@php vendor/bin/phpstan analyse",
+        "format": "@php vendor/bin/pint"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Prism\\Mcp\\PrismMcpServiceProvider"
+            ],
+            "aliases": {
+                "PrismMcp": "Prism\\Mcp\\Facades\\PrismMcp"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}
