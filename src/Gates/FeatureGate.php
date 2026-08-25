@@ -34,10 +34,15 @@ class FeatureGate implements ToolGate
     /** The FMS binding. Referenced as a string so this file loads without FMS. */
     protected const MANAGER = 'ParticleAcademy\\Fms\\Contracts\\FeatureManagerInterface';
 
+    /**
+     * No defaults, for the same reason as LaravelGate: `config/prism-mcp.php`
+     * is the single source for these and a constructor default would be a
+     * second copy of them, free to drift.
+     */
     public function __construct(
         protected readonly Container $container,
-        protected readonly string $feature = 'mcp.tools',
-        protected readonly bool $perServer = true,
+        protected readonly string $feature,
+        protected readonly bool $perServer,
     ) {}
 
     #[\Override]

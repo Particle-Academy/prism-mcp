@@ -165,6 +165,24 @@ set one boolean. (It was one, in the first draft of this package. The review
 found it and the test that proves it is fixed is
 `it('does not let an error result bypass the guard')`.)
 
+#### 3b. A tool that is dropped is dropped visibly
+
+A tool whose `x-mcp-header` annotations break the spec's rules is **excluded**
+from the list — the specification makes that a client MUST, and one malformed
+tool should not make an otherwise healthy server unusable.
+
+That exclusion is this package's one carve-out from the ecosystem rule that
+things which cannot be done **throw** rather than degrade quietly. So it is
+bounded at both ends:
+
+- Under `trustingEveryTool()` the tool is dropped, and the exclusion is readable
+  from `->client()->excluded()` — not only from a log line, because nobody reads
+  a log during a run.
+- Under an **explicit allowlist naming that tool**, it **throws**. You asked for
+  that tool by name; returning successfully without it is the Perplexity
+  `withTools()` failure exactly — a run that completes with the model appearing
+  to decline a tool it was never given.
+
 #### 4. A gate decides who may run what
 
 Trust decides which tools the model is **told about**. A gate decides whether a
@@ -172,7 +190,7 @@ given actor may **run** one. Different questions, and both worth answering.
 
 ```php
 // Laravel's Gate — authorization.
-Gate::define('use-mcp-tool', fn (?User $user, string $server, string $tool, array $args) =>
+Gate::define('mcp.call', fn (?User $user, string $server, string $tool, array $args) =>
     $user?->can('use-external-tools') ?? false);
 ```
 
@@ -327,7 +345,8 @@ stops a destructive action. FMS's own contract makes the distinction explicitly 
 it added `isEntitled()` as a named alias so a call site declares which question
 it is asking.
 
-`LaravelGate` asks **one** ability, `use-mcp-tool`, receiving
+`LaravelGate` asks **one** ability, `mcp.call` — the ecosystem's
+`<package>.<verb>` convention — receiving
 `($server, $tool, $arguments)`. It does not derive an ability per tool, because
 an ability nobody defined is denied by default — so a third party adding a tool
 could otherwise break your authorization by publishing something.
@@ -356,7 +375,7 @@ See [decision 0004](https://github.com/Particle-Academy/prism-parity/blob/main/d
 | `tool_denied` | The gate refused this call |
 | `result_too_large` | A result exceeded `max_result_bytes` |
 | `tool_call_failed` | The server reported `isError` |
-| `mirrored_parameter_refused` | A tool's `x-mcp-header` annotations broke the rules |
+| `mirrored_parameter_refused` | A tool's `x-mcp-header` annotations broke the rules, and it was named in the allowlist |
 | `unsupported_protocol_version` | The server speaks a different MCP era |
 | `unsupported_transport` | stdio, or an unknown transport |
 | `protocol_failure` | Malformed JSON-RPC, or a JSON-RPC error |
@@ -463,6 +482,10 @@ composer format  # Pint
 Every guard in this package has been **broken on purpose** and watched go red. A
 green assertion nobody has seen fail is a hypothesis, not a test — if you add a
 check, add the mutant that proves it works.
+
+That includes the shipped configuration. A test that writes the config it reads
+is a closed loop and proves nothing about what a consumer gets; `ShippedConfigTest`
+reads the published file and proves the values in it reach behaviour.
 
 ## License
 

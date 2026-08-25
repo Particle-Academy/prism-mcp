@@ -137,6 +137,21 @@ class TrustPolicy
     }
 
     /**
+     * Whether the consumer named this tool BY NAME, as opposed to sweeping it up
+     * in a wildcard.
+     *
+     * The distinction decides what a dropped tool means. Under a wildcard, the
+     * consumer asked for whatever the server offers and one fewer is still an
+     * answer to that. Under an explicit name, they asked for THIS tool, and its
+     * absence is a different event entirely — see the exclusion boundary in
+     * PendingConnection::tools().
+     */
+    public function namesExplicitly(string $tool): bool
+    {
+        return in_array($tool, $this->allowedTools ?? [], true);
+    }
+
+    /**
      * Pinning is per-tool and opt-in.
      *
      * A tool with no pin passes — otherwise turning pinning on for one tool

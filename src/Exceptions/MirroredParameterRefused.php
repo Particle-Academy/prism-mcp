@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Prism\Mcp\Exceptions;
 
+use Prism\Mcp\Support\Legible;
+
 /**
  * `2026-07-28` lets a server annotate an input-schema property with
  * `x-mcp-header`, and a client MUST copy that argument into an `Mcp-Param-*`
@@ -26,6 +28,29 @@ class MirroredParameterRefused extends McpException
             .'request headers with `x-mcp-header`, and the rules on that are narrow because the value ends up '
             .'visible to every hop between here and the server.',
             $tool,
+            $reason,
+        ));
+    }
+
+    /**
+     * The same refusal, raised rather than logged, because the consumer named
+     * this tool explicitly.
+     *
+     * Dropping a wildcard-swept tool is a degradation the caller can live with.
+     * Dropping a tool they asked for by name and returning successfully is a
+     * result that lies about what it is.
+     */
+    public static function becauseNamed(string $server, string $tool, string $reason): self
+    {
+        return new self(sprintf(
+            'The MCP tool [%s] is in your trust declaration for server [%s], but it cannot be offered to the '
+            ."model.\n\n%s\n\n"
+            .'Raised rather than skipped because you named this tool. A tool swept up by a wildcard can be '
+            .'dropped quietly; one you asked for cannot, or the run completes with the model appearing to '
+            .'decline a tool it was never given. Remove it from the allowlist, or ask the server operator to '
+            .'fix the annotation.',
+            Legible::name($tool),
+            $server,
             $reason,
         ));
     }

@@ -24,6 +24,19 @@ class Client
     /** @var list<ToolDefinition>|null */
     protected ?array $memoised = null;
 
+    /**
+     * Tools the server offered and this client refused to carry, name => reason.
+     *
+     * Kept rather than only logged. Decision 0011 draws the line: degrading
+     * silently is acceptable only when the degradation is visible in the
+     * result. A log line is not the result — nobody reads it during the run,
+     * and the caller holds an array of tools with no way to tell that a
+     * shorter one is what they got.
+     *
+     * @var array<string, string>
+     */
+    protected array $excluded = [];
+
     public function __construct(
         protected readonly ServerConfig $server,
         protected readonly Protocol $protocol,
@@ -217,6 +230,7 @@ class Client
     protected function hydrate(array $payloads): array
     {
         $definitions = [];
+        $this->excluded = [];
 
         foreach ($payloads as $payload) {
             $definition = ToolDefinition::from($this->server->name, $payload);
@@ -234,6 +248,8 @@ class Client
                     'code' => $refused->code(),
                 ]);
 
+                $this->excluded[$definition->name] = $refused->getMessage();
+
                 continue;
             }
 
@@ -241,5 +257,13 @@ class Client
         }
 
         return $definitions;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function excluded(): array
+    {
+        return $this->excluded;
     }
 }

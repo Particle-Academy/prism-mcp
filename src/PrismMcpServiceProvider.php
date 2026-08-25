@@ -28,7 +28,10 @@ class PrismMcpServiceProvider extends ServiceProvider
 
         $this->app->bind(LaravelGate::class, fn ($app): LaravelGate => new LaravelGate(
             $app->make(GateContract::class),
-            (string) $app->make(ConfigRepository::class)->get('prism-mcp.gates.laravel.ability', 'use-mcp-tool'),
+            // No fallback literal here either. The shipped config is merged in
+            // register(), so this key always resolves — and a fallback would be
+            // the third copy of a value that should have exactly one.
+            (string) $app->make(ConfigRepository::class)->get('prism-mcp.gates.laravel.ability'),
         ));
 
         $this->app->bind(FeatureGate::class, function ($app): FeatureGate {
@@ -36,8 +39,8 @@ class PrismMcpServiceProvider extends ServiceProvider
 
             return new FeatureGate(
                 $app,
-                (string) $config->get('prism-mcp.gates.fms.feature', 'mcp.tools'),
-                (bool) $config->get('prism-mcp.gates.fms.per_server', true),
+                (string) $config->get('prism-mcp.gates.fms.feature'),
+                (bool) $config->get('prism-mcp.gates.fms.per_server'),
             );
         });
     }

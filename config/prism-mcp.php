@@ -120,11 +120,13 @@ return [
     'gates' => [
 
         // Laravel's Gate — authorization: "may this actor do this".
+        // Named `<package>.<verb>` per ecosystem decision 0010, and configurable
+        // so an application with its own `mcp.call` can move ours aside.
         // One ability for every remote tool, receiving ($server, $tool, $args),
         // so a third party adding a tool can never introduce an ability your
         // application has not defined.
         'laravel' => [
-            'ability' => 'use-mcp-tool',
+            'ability' => 'mcp.call',
         ],
 
         // Fancy's Feature Management System — entitlement: "is this subject

@@ -10,6 +10,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Log;
 use Prism\Mcp\Contracts\ToolGate;
+use Prism\Mcp\Exceptions\MirroredParameterRefused;
 use Prism\Mcp\Gates\AllowAll;
 use Prism\Mcp\Tools\RemoteTool;
 use Prism\Mcp\Transport\HttpTransport;
@@ -209,6 +210,30 @@ class PendingConnection
 
         if ($this->resultFilter instanceof Closure) {
             $guard->filtering($this->resultFilter);
+        }
+
+        // THE EXCLUSION BOUNDARY — decisions 0011 and 0013.
+        //
+        // The ecosystem rule is that something which cannot be done THROWS and
+        // never degrades silently. This package carves out one exception to it:
+        // a tool whose `x-mcp-header` annotations break the spec's rules is
+        // DROPPED rather than thrown on, because the spec makes that exclusion
+        // a client MUST and one malformed tool should not make an otherwise
+        // healthy server unusable.
+        //
+        // Here is where the exception meets the rule again. Under
+        // `trustingEveryTool()` the consumer asked for whatever the server
+        // offers, and one fewer is still an answer to that question. Under an
+        // explicit allowlist they asked for THAT tool by name — and a named
+        // tool that silently never arrives is the Perplexity `withTools()`
+        // failure exactly: a run that completes, with the model appearing to
+        // decline a tool it was never actually given.
+        //
+        // So the exception holds for a wildcard and the rule wins for a name.
+        foreach ($client->excluded() as $name => $reason) {
+            if ($this->config->trust->namesExplicitly((string) $name)) {
+                throw MirroredParameterRefused::becauseNamed($this->config->name, (string) $name, $reason);
+            }
         }
 
         $offered = array_map(fn ($definition): string => $definition->name, $definitions);
