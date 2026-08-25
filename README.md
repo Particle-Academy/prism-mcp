@@ -221,6 +221,20 @@ nothing to them.
 what `search` returns, and it is certainly not trusting whatever server *that*
 server talks to.
 
+### One thing this package cannot guard, so guard it yourself
+
+**A server URL must never come from user input.**
+
+`PrismMcp::client($url)` fetches whatever you point it at, and this package does
+not block private or loopback addresses — because `http://127.0.0.1:3000/mcp` is
+how you run a local MCP server, and refusing it would break the ordinary case to
+prevent a misuse. So the SSRF boundary is yours: server URLs belong in config or
+in an operator-controlled setting, never in a request parameter.
+
+The same goes for the `gate` key, which resolves a class name from the
+container. Both are configuration surfaces, and configuration is trusted here in
+the way every Laravel package trusts it.
+
 ### The residual risk, stated plainly
 
 With every feature here switched on, a malicious server can still: emit an
