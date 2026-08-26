@@ -469,6 +469,21 @@ capabilities. Prism core already bridges to it: `Tool::make()` accepts a
 is a good one. This package is the other half of the problem: consuming a server
 you do **not** own, which is where the trust boundary lives. Use both.
 
+> **They do not yet talk to each other over the wire, and that surprises people.**
+> This client speaks `2026-07-28` only. `laravel/mcp` `v1.0.0-beta.1` implements
+> the previous revision — `initialize`, then a session — so pointing this client
+> at a server built on it fails, by design rather than by accident.
+>
+> A client and a server in one estate read as interoperable, so it is said here
+> rather than left to be discovered: **a `laravel/mcp` server is reachable from
+> this client once `laravel/mcp` ships `2026-07-28`, and not before.** In the
+> meantime, tools you own are reachable from a Prism agent natively through
+> `Tool::make()`, which skips the transport entirely.
+>
+> The failure names the cause. A server answering `-32601` for `server/discover`
+> — which the revision makes a server MUST — is reported as a probable revision
+> mismatch, not as a missing method.
+
 **`prism-php/relay`** was the previous answer to consuming MCP servers from
 Prism. It is superseded — this package declares `replace` — and the reasons are
 worth stating, because they are the design brief:

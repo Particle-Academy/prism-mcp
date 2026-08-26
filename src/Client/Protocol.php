@@ -63,6 +63,21 @@ class Protocol
                 );
             }
 
+            // -32601 is the OTHER half, and catching only -32022 left a hole
+            // this method's whole purpose was to close. -32022 can only be
+            // produced by a server that already knows about this revision and
+            // is declining it. A server implementing an EARLIER revision has
+            // never heard of `server/discover` and answers "method not found",
+            // which fell through as a raw protocol failure — sending the
+            // operator to look at their own arguments, which is the exact
+            // outcome this method exists to prevent.
+            //
+            // Found by a consumer pointing this client at a `laravel/mcp`
+            // server and getting -32601 with nothing in it about versions.
+            if ($failure->rpcCode === -32601) {
+                throw UnsupportedProtocolVersion::notDiscoverable($this->transport->label());
+            }
+
             throw $failure;
         }
 

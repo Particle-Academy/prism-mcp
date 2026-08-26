@@ -92,6 +92,45 @@ it('turns a -32022 rejection into the same honest refusal', function (): void {
         ->toThrow(UnsupportedProtocolVersion::class, '2025-06-18');
 });
 
+it('reads -32601 on server/discover as a version signal, not a bad argument', function (): void {
+    // The other half of the version story, and the half that was missing.
+    // -32022 can only come from a server that KNOWS about 2026-07-28 and is
+    // declining it. A server on an earlier revision has never heard of
+    // `server/discover` and answers "method not found" — which used to fall
+    // through as a raw protocol failure and send the operator hunting through
+    // their own configuration. `laravel/mcp` v1.0.0-beta.1 does exactly this.
+    fakeMcpServer([
+        'server/discover' => [[
+            'error' => [
+                'code' => -32601,
+                'message' => 'The method [server/discover] was not found.',
+            ],
+        ]],
+    ]);
+
+    expect(fn () => PrismMcp::server('acme')->tools())
+        ->toThrow(UnsupportedProtocolVersion::class, 'earlier revision');
+});
+
+it('still reports an unrelated -32601 as itself', function (): void {
+    // The inference is scoped to `server/discover`, where the spec makes the
+    // method a MUST. A method-not-found on anything else says nothing about
+    // the revision, and dressing it up as a version problem would be the
+    // guess this client is careful not to make.
+    fakeMcpServer([
+        'server/discover' => [discoverResult()],
+        'tools/list' => [[
+            'error' => [
+                'code' => -32601,
+                'message' => 'The method [tools/list] was not found.',
+            ],
+        ]],
+    ]);
+
+    expect(fn () => PrismMcp::server('acme')->tools())
+        ->toThrow(ProtocolFailure::class, 'tools/list');
+});
+
 it('refuses a response whose id does not match the request', function (): void {
     Http::fake([
         'https://mcp.test/mcp' => Http::response([
