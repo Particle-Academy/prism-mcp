@@ -81,9 +81,7 @@ return [
     |
     |       // Optional. Pin a tool to a digest you have read, so a server that
     |       // rewrites its description later is refused instead of obeyed.
-    |       // Get the digest from: php artisan tinker
-    |       //   PrismMcp::server('github')->client()->definitions()
-    |       //     ->each(fn ($d) => dump($d->name, $d->digest()));
+    |       // Get them with: php artisan prism-mcp:pins github
     |       'pins' => [
     |           // 'search_repositories' => 'sha256:…',
     |       ],

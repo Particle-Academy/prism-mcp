@@ -9,6 +9,7 @@ use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\ServiceProvider;
+use Prism\Mcp\Console\Commands\PinsCommand;
 use Prism\Mcp\Gates\FeatureGate;
 use Prism\Mcp\Gates\LaravelGate;
 
@@ -51,6 +52,10 @@ class PrismMcpServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/prism-mcp.php' => config_path('prism-mcp.php'),
             ], 'prism-mcp-config');
+
+            $this->commands([
+                PinsCommand::class,
+            ]);
         }
     }
 }

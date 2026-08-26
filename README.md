@@ -129,11 +129,24 @@ Opt-in, per tool. Record the digest of a definition you have actually read:
 ```
 
 ```bash
-php artisan tinker
->>> foreach (PrismMcp::server('github')->client()->definitions() as $d) {
-...     printf("%-30s %s\n", $d->name, $d->digest());
-... }
+php artisan prism-mcp:pins github
 ```
+
+It prints a digest per tool and a `trust` block ready to paste, and it reads the
+definitions **without offering anything to a model** — you run it precisely
+BEFORE the tools are trusted, in order to decide what to trust. So it works
+against a server with no trust declaration at all, which every other path in
+this package refuses.
+
+`--tool=name` narrows it, `--json` makes it scriptable, and a name the server
+does not publish is reported rather than quietly dropped: returning fewer rows
+than were asked for is how somebody pins three of four tools and believes they
+pinned four.
+
+Descriptions are stripped of control characters on the way to your terminal.
+They are written by the party you are inspecting, and a terminal renders ANSI
+escapes — the output of a command whose whole job is *look at this before you
+trust it* must not be paintable by whoever is being looked at.
 
 The digest covers name, title, description and input schema — everything the
 model will read. It deliberately excludes annotations, which the spec already
