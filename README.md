@@ -27,6 +27,11 @@ and the decisions binding every package in the ecosystem live in
 Nothing here restates them, because restated documentation drifts exactly like
 restated code and nothing tests prose.
 
+> **Working on this package?** Read **[`AGENTS.md`](AGENTS.md)** first — the boundary
+> this package has to hold, the gates that must be green, and the traps that have
+> already caught someone.
+> `@link AGENTS.md`
+
 ---
 
 ## The trust boundary
