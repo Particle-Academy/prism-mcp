@@ -3,7 +3,15 @@
     "description": "Model Context Protocol for Prism — consume remote MCP tools as Prism tools, across a trust boundary you can see.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["laravel", "ai", "agents", "llm", "prism", "mcp", "model-context-protocol"],
+    "keywords": [
+        "laravel",
+        "ai",
+        "agents",
+        "llm",
+        "prism",
+        "mcp",
+        "model-context-protocol"
+    ],
     "authors": [
         {
             "name": "Wish Born",
@@ -14,6 +22,7 @@
         "php": "^8.2",
         "ext-json": "*",
         "ext-mbstring": "*",
+        "symfony/console": "^7.2|^8.0",
         "laravel/framework": "^12.61.1|^13.12.0",
         "particle-academy/prism": ">=0.114 <1.0"
     },
