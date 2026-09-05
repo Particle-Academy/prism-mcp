@@ -156,6 +156,29 @@ its JSON does not read as a rewritten tool.
 This is the one defence against a rug pull that actually holds, because it does
 not depend on recognising malice — only on noticing change.
 
+> **Every digest this package produces CHANGED on 2026-09-04. Recompute any pin
+> recorded before that date.**
+>
+> An empty map inside a tool definition used to be digested as `[]`, because PHP
+> has one array type and an empty JSON object decodes to the same value as an
+> empty JSON array. Every other language digests it as `{}`, so a pin computed
+> here refused the same tool in a TypeScript or Python client — and a pin
+> refusing a tool you trust is indistinguishable from the rug pull it exists to
+> catch. `tools/list` is now decoded keeping the two apart, so the digest is the
+> same value in all three implementations.
+>
+> **What it looks like if you skip this:** `prism-mcp:pins` prints a digest that
+> does not match the one in your config, and the tool is refused with
+> `tool_definition_changed`. That is the safe direction — nothing reaches the
+> model — but it is the same message a real rewrite produces. Re-run
+> `php artisan prism-mcp:pins <server>`, **read the descriptions again**, and
+> paste the new block. Do not delete the pins.
+
+An empty `inputSchema` — absent, or sent as `{}` — digests as `{}` either way. A
+server that starts emitting a field it used to leave out has not rewritten its
+tool, and a pin that broke on that would teach operators to remove pins. An
+empty `required` list stays a list, because it is one.
+
 #### 3. Results are bounded, framed, and filterable
 
 The discussion around MCP focuses on tool *descriptions*. The **result** path is

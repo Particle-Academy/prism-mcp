@@ -11,6 +11,7 @@ use Prism\Mcp\Enums\ProtocolVersion;
 use Prism\Mcp\Enums\RequestHeader;
 use Prism\Mcp\Exceptions\ProtocolFailure;
 use Prism\Mcp\Exceptions\UnsupportedProtocolVersion;
+use Prism\Mcp\Support\Json;
 use Prism\Mcp\Support\MirroredParameters;
 
 /**
@@ -96,12 +97,25 @@ class Protocol
     }
 
     /**
+     * `$preservingContainerTypes` keeps an empty JSON object from decoding as an
+     * empty array — see `Support\Json`. It is off by default and on for
+     * `tools/list` alone, because a tool definition is the one value in this
+     * package that gets HASHED, and that is where `{}` and `[]` stop being the
+     * same thing. Everything else here reads fields it has already type-checked,
+     * and widening the decode for those would change what a malformed result
+     * does without buying anything.
+     *
      * @param  array<string, mixed>  $params
      * @param  array<string, string>  $extraHeaders
      * @return array<string, mixed>
      */
-    public function call(string $method, array $params = [], ?string $name = null, array $extraHeaders = []): array
-    {
+    public function call(
+        string $method,
+        array $params = [],
+        ?string $name = null,
+        array $extraHeaders = [],
+        bool $preservingContainerTypes = false,
+    ): array {
         $id = $this->nextId++;
 
         $payload = json_encode([
@@ -120,7 +134,7 @@ class Protocol
             ...$extraHeaders,
         ]);
 
-        return $this->resultOf($raw, $id);
+        return $this->resultOf($raw, $id, $preservingContainerTypes);
     }
 
     /**
@@ -172,11 +186,11 @@ class Protocol
     /**
      * @return array<string, mixed>
      */
-    protected function resultOf(string $raw, int $expectedId): array
+    protected function resultOf(string $raw, int $expectedId, bool $preservingContainerTypes = false): array
     {
         try {
             /** @var mixed $response */
-            $response = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $response = Json::decode($raw, $preservingContainerTypes);
         } catch (JsonException $e) {
             throw ProtocolFailure::malformed($this->transport->label(), $e->getMessage());
         }

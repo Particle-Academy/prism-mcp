@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Prism\Mcp\Support\Json;
 use Prism\Mcp\Support\ToolDefinition;
 
 /**
@@ -17,19 +18,26 @@ use Prism\Mcp\Support\ToolDefinition;
  * Without this, the ports' tests would be pinned to a snapshot of PHP that PHP
  * itself had moved on from, and every one of them would stay green while the
  * claim they encode quietly stopped being true.
+ *
+ * All thirteen rows agree as of 2026-09-04, which they did not when the suite
+ * was written; G-20 records what closed the three that did not, and the wire
+ * half of it is asserted in `tests/Feature/ProtocolTest.php` rather than here.
  */
 function digestCorpus(): array
 {
-    return json_decode(
+    // `Json::decode` preserving container types, NOT `json_decode($raw, true)`.
+    // The assoc decode collapses `{}` onto `[]`, so dig-0003's empty
+    // `properties` map would reach the digest as an empty LIST — an input no
+    // server can send, and precisely the defect this suite exists to catch. A
+    // corpus that quietly tests the wrong input is worse than no corpus.
+    return Json::decode(
         (string) file_get_contents(__DIR__.'/../fixtures/mcp-tool-digest.json'),
-        true,
-        512,
-        JSON_THROW_ON_ERROR,
+        preservingContainerTypes: true,
     )['cases'];
 }
 
 it('is the whole suite, not a subset someone trimmed to green', function (): void {
-    expect(digestCorpus())->toHaveCount(10);
+    expect(digestCorpus())->toHaveCount(13);
 });
 
 it('still produces the digest the corpus recorded for it', function (): void {
@@ -39,26 +47,59 @@ it('still produces the digest the corpus recorded for it', function (): void {
     }
 });
 
-it('still DIFFERS from the ports exactly where the corpus says it does', function (): void {
-    // Asserted from this side too, not left to the ports. A change here that
-    // accidentally converged the reference onto the ports' encoding would
-    // otherwise be caught only in two other repositories, on someone else's
-    // next run — and this is the repository whose output the pin is generated
-    // from.
+it('agrees with BOTH ports on every row, so a pin transfers in either direction', function (): void {
+    // Asserted from this side too, not left to the ports. This is the
+    // repository the pin is generated from, so a change here that pulled the
+    // reference away from the ports would otherwise be caught only in two other
+    // repositories, on someone else's next run.
     foreach (digestCorpus() as $case) {
         $produced = ToolDefinition::from('conformance', $case['payload'])->digest();
 
-        $case['agrees']
-            ? expect($produced)->toBe($case['digest']['ts'], $case['id'])
-            : expect($produced)->not->toBe($case['digest']['ts'], $case['id']);
+        expect($produced)->toBe($case['digest']['ts'], $case['id'])
+            ->and($produced)->toBe($case['digest']['py'], $case['id'])
+            ->and($case['agrees'])->toBeTrue($case['id']);
     }
 });
 
-it('names the divergent rows, so the count cannot drift silently', function (): void {
-    $diverging = array_values(array_map(
-        fn (array $case): string => $case['id'],
-        array_filter(digestCorpus(), fn (array $case): bool => $case['agrees'] === false),
-    ));
+it('reads an ABSENT schema and an explicitly empty one as the same tool', function (): void {
+    // dig-0002 omits `inputSchema`; dig-0011 sends `{}`. A server that starts
+    // emitting a field it used to leave out has not rewritten its tool, and a
+    // pin that broke on that would be deleted by the first operator it hit.
+    // Asserted on what the code PRODUCES rather than on two recorded strings,
+    // which would only restate the fixture.
+    $byId = [];
 
-    expect($diverging)->toBe(['dig-0002', 'dig-0003', 'dig-0007']);
+    foreach (digestCorpus() as $case) {
+        $byId[$case['id']] = $case;
+    }
+
+    expect(ToolDefinition::from('conformance', $byId['dig-0002']['payload'])->digest())
+        ->toBe(ToolDefinition::from('conformance', $byId['dig-0011']['payload'])->digest());
+});
+
+it('digests an empty LIST as a list, so the empty-map fix did not over-reach', function (): void {
+    // The guard on the fix rather than on the defect. `required` is a list and
+    // `properties` is a map; a rule that promoted every empty array to an object
+    // would render `"required": []` as `{}` — green on the row this fix was for
+    // and broken on a far more ordinary one, in a way nothing errors about.
+    $schema = ['type' => 'object', 'properties' => new stdClass];
+
+    $asList = ToolDefinition::from('conformance', [
+        'name' => 'search', 'description' => 'd', 'inputSchema' => [...$schema, 'required' => []],
+    ]);
+
+    $asMap = ToolDefinition::from('conformance', [
+        'name' => 'search', 'description' => 'd', 'inputSchema' => [...$schema, 'required' => new stdClass],
+    ]);
+
+    expect($asList->digest())->not->toBe($asMap->digest());
+
+    // And the list form is the one the other two languages recorded.
+    $byId = [];
+
+    foreach (digestCorpus() as $case) {
+        $byId[$case['id']] = $case;
+    }
+
+    expect($asList->digest())->toBe($byId['dig-0012']['digest']['ts']);
 });

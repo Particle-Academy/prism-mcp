@@ -247,3 +247,52 @@ it('stops a server that paginates forever', function (): void {
     expect(fn () => PrismMcp::server('acme')->tools())
         ->toThrow(ProtocolFailure::class, 'past 100 pages');
 });
+
+it('keeps an empty MAP apart from an empty LIST across the wire, because a digest is a pin', function (): void {
+    // The half a corpus runner cannot prove on its own. `tests/Unit/ToolDigestCorpusTest`
+    // hands `ToolDefinition::from()` a payload THIS repository decoded, so it
+    // says nothing about what a server's JSON does on the way in — and PHP's
+    // ordinary assoc decode collapses `{}` onto `[]`, which is the whole defect.
+    // This row runs a real `tools/list` response through the transport and
+    // asserts the digest equals the value the other two languages recorded for
+    // the same tool, so a pin computed here transfers.
+    fakeMcpServer([
+        'server/discover' => [discoverResult()],
+        'tools/list' => [['tools' => [[
+            'name' => 'search',
+            'description' => 'd',
+            // `(object) []` so the fake server puts `{}` on the wire, which is
+            // what a zero-argument tool's schema actually looks like.
+            'inputSchema' => ['type' => 'object', 'properties' => (object) []],
+        ]]]],
+    ]);
+
+    $corpus = json_decode((string) file_get_contents(__DIR__.'/../fixtures/mcp-tool-digest.json'), true);
+    $expected = null;
+
+    foreach ($corpus['cases'] as $case) {
+        if ($case['id'] === 'dig-0003') {
+            $expected = $case['digest']['ts'];
+        }
+    }
+
+    expect(PrismMcp::server('acme')->tools()[0]->definition()->digest())->toBe($expected);
+});
+
+it('still offers a property whose schema is an empty object', function (): void {
+    // The consumer half of the same change. An empty property schema means "any
+    // value" and is legal JSON Schema; keeping it distinguishable from `[]` must
+    // not cost the model the parameter, because a dropped parameter is the
+    // silent kind of loss — the tool is still offered, just without the argument
+    // it needs.
+    fakeMcpServer([
+        'server/discover' => [discoverResult()],
+        'tools/list' => [['tools' => [[
+            'name' => 'search',
+            'description' => 'd',
+            'inputSchema' => ['type' => 'object', 'properties' => ['anything' => (object) []]],
+        ]]]],
+    ]);
+
+    expect(PrismMcp::server('acme')->tools()[0]->parametersAsArray())->toHaveKey('anything');
+});

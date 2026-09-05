@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Prism\Mcp\Support;
 
 use Prism\Mcp\Exceptions\ProtocolFailure;
+use stdClass;
 
 /**
  * One tool as a server describes it — validated on arrival, and digestible.
@@ -43,8 +44,13 @@ class ToolDefinition
 
         $title = $payload['title'] ?? null;
         $description = $payload['description'] ?? null;
-        $inputSchema = $payload['inputSchema'] ?? [];
-        $annotations = $payload['annotations'] ?? [];
+
+        // A server that sent `{}` here reaches us as the empty-object sentinel
+        // `Support\Json` preserves. The rest of this class wants a PHP array, and
+        // the emptiness is all `digest()` needs — an empty schema renders `{}`
+        // whether it arrived that way or was absent entirely.
+        $inputSchema = Json::asMap($payload['inputSchema'] ?? []);
+        $annotations = Json::asMap($payload['annotations'] ?? []);
 
         if (! is_array($inputSchema) || ! is_array($annotations)) {
             throw ProtocolFailure::malformed($server, sprintf('the tool [%s] has a malformed schema', Legible::name($name)));
@@ -73,6 +79,14 @@ class ToolDefinition
      *
      * Keys are sorted recursively, so a server reordering its JSON does not
      * read as a rewritten tool.
+     *
+     * **An empty `inputSchema` is digested as `{}`, never as `[]`.** An MCP
+     * input schema is a JSON Schema, and a JSON Schema is an object; PHP is the
+     * only language here that cannot say so, and rendering `[]` made every pin
+     * for a schemaless tool language-specific. Nested empty maps keep their type
+     * because `Support\Json` never discarded it — this line covers the top level,
+     * where the value may also be a default this class supplied rather than
+     * anything the server sent.
      */
     public function digest(): string
     {
@@ -81,7 +95,7 @@ class ToolDefinition
             'name' => $this->name,
             'title' => $this->title,
             'description' => $this->description,
-            'inputSchema' => $this->inputSchema,
+            'inputSchema' => $this->inputSchema === [] ? new stdClass : $this->inputSchema,
         ];
 
         return 'sha256:'.substr(
@@ -121,6 +135,10 @@ class ToolDefinition
     }
 
     /**
+     * A `stdClass` falls through untouched, which is correct rather than
+     * accidental: the only objects in this material are the EMPTY maps
+     * `Support\Json` preserved, and an empty map has no keys to sort.
+     *
      * @param  mixed  $value
      */
     protected static function sortDeep($value): mixed

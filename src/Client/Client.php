@@ -8,6 +8,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Log;
 use Prism\Mcp\Exceptions\MirroredParameterRefused;
 use Prism\Mcp\Exceptions\ProtocolFailure;
+use Prism\Mcp\Support\Json;
 use Prism\Mcp\Support\MirroredParameters;
 use Prism\Mcp\Support\ToolDefinition;
 
@@ -178,7 +179,17 @@ class Client
         $pages = 0;
 
         do {
-            $result = $this->protocol->call('tools/list', $cursor === null ? [] : ['cursor' => $cursor]);
+            // The one call in this package whose result gets HASHED, so it is
+            // the one that may not lose the difference between `{}` and `[]`.
+            // A schema's empty `properties` map is not the same value as an
+            // empty `required` list, and a digest that cannot tell them apart
+            // is a pin that does not transfer to any other language. See
+            // `Support\Json` and G-20.
+            $result = $this->protocol->call(
+                'tools/list',
+                $cursor === null ? [] : ['cursor' => $cursor],
+                preservingContainerTypes: true,
+            );
 
             $tools = $result['tools'] ?? null;
 
@@ -187,6 +198,12 @@ class Client
             }
 
             foreach ($tools as $tool) {
+                // `Json::asMap` because an entry the server sent as `{}` arrives
+                // as the empty-object sentinel. Dropping it here would turn a
+                // nameless tool — a protocol failure `hydrate()` raises — into a
+                // silently shorter list.
+                $tool = Json::asMap($tool);
+
                 if (is_array($tool)) {
                     $payloads[] = $tool;
                 }

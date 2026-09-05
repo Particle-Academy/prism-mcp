@@ -58,6 +58,26 @@ distrust. Keys are sorted recursively so a server reordering its JSON does not
 read as a rewritten tool. Adding annotations to the digest would make pins fire
 on noise, and pins that cry wolf get switched off.
 
+**`tools/list` is decoded WITHOUT collapsing `{}` onto `[]`.** `Client` passes
+`preservingContainerTypes: true`, and `Support\Json` keeps an empty JSON object
+as an empty `stdClass` so it re-encodes as `{}`. This is the one call in the
+package whose result gets hashed, and PHP's ordinary assoc decode made a
+schemaless tool digest to a value no other language could reproduce — so a pin
+computed here refused the same tool in a TypeScript or Python client. Reverting
+that decode to `json_decode($raw, true)` looks like a simplification and
+silently un-portables every pin. G-20; pinned by
+`prism-parity/suites/mcp-tool-digest` and by the wire rows in
+`tests/Feature/ProtocolTest.php`, which the corpus alone cannot cover because it
+hands `ToolDefinition::from()` a payload this repository decoded.
+
+**Do not "fix" the same thing by promoting empty arrays to objects.** A JSON
+Schema's `required` is a list and its `properties` is a map; a rule that cannot
+tell them apart trades one divergence for a more common one. `dig-0012` pins it.
+
+**Digests changed on 2026-09-04 and every pre-existing pin is invalid.** Say so
+in any release note. The failure mode of not saying so is an operator seeing
+`tool_definition_changed`, reading it as a rug pull, and deleting the pin.
+
 ## The one carve-out from "unsupported means throw"
 
 A tool with spec-violating `x-mcp-header` annotations is **excluded** from the

@@ -8,6 +8,7 @@ use Prism\Mcp\Client\Client;
 use Prism\Mcp\Contracts\ToolGate;
 use Prism\Mcp\Exceptions\ToolCallFailed;
 use Prism\Mcp\Exceptions\ToolDenied;
+use Prism\Mcp\Support\Json;
 use Prism\Mcp\Support\MirroredParameters;
 use Prism\Mcp\Support\ToolDefinition;
 use Prism\Mcp\Trust\ResultGuard;
@@ -51,6 +52,12 @@ class RemoteTool extends Tool
         $required = $this->definition->required();
 
         foreach ($this->definition->properties() as $name => $schema) {
+            // `Json::asMap` because a property declared as `{}` — "any value" —
+            // arrives as the empty-object sentinel the digest needs. Without it
+            // the parameter would be dropped from the tool and the model would
+            // simply never be offered it, which is the silent kind of loss.
+            $schema = Json::asMap($schema);
+
             if (! is_string($name) || ! is_array($schema)) {
                 continue;
             }
