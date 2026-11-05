@@ -31,7 +31,7 @@ class ToolResult
     public static function from(string $server, array $result): self
     {
         $content = $result['content'] ?? [];
-        $isError = $result['isError'] ?? false;
+        $isError = array_key_exists('isError', $result) ? $result['isError'] : false;
         $structured = $result['structuredContent'] ?? null;
 
         if (! is_array($content)) {
@@ -41,8 +41,8 @@ class ToolResult
         return new self(
             content: array_values(array_filter($content, is_array(...))),
             // A non-boolean `isError` is treated as an error rather than
-            // ignored: a server that sends `"true"` means it. A JSON null has
-            // already collapsed to false through the `??` above.
+            // ignored. Only absence or literal false reports success, including
+            // when a malformed server explicitly supplies null (G230/A28).
             isError: $isError !== false,
             structuredContent: is_array($structured) ? $structured : null,
         );

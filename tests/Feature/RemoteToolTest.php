@@ -324,3 +324,26 @@ it('does not let an error result bypass the guard', function (): void {
 
     expect($message)->toContain('untrusted-tool-output');
 });
+
+it('G230 frames an explicitly null error flag before raising the tool failure', function (): void {
+    fakeMcpServer([
+        'server/discover' => [discoverResult()],
+        'tools/list' => [['tools' => [toolPayload('search')]]],
+        'tools/call' => [[
+            'content' => [['type' => 'text', 'text' => 'owned null error']],
+            'isError' => null,
+        ]],
+    ]);
+
+    $tool = PrismMcp::server('acme')->tools()[0];
+    $failure = null;
+
+    try {
+        $tool->__invoke(query: 'owned');
+    } catch (ToolCallFailed $caught) {
+        $failure = $caught;
+    }
+
+    expect($failure)->toBeInstanceOf(ToolCallFailed::class)
+        ->and($failure?->getMessage())->toContain('untrusted-tool-output', 'owned null error');
+});
