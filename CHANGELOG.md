@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - **Breaking:** an explicitly present `isError: null` now reports tool failure.
   Only an absent field or literal `false` reports success. Every other present
