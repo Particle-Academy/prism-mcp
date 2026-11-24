@@ -128,3 +128,143 @@ it('does not follow a cross-origin redirect from a configured connection', funct
         ->and($failure?->getMessage())->not->toContain(MCP_REDIRECT_KEY)
         ->not->toContain(MCP_REDIRECT_TOKEN);
 });
+
+/*
+ * Hostile Locations.
+ *
+ * Each of these has defeated a same-origin check somewhere: a host hidden in
+ * userinfo, a fragment or query that moves where the authority ends, a
+ * scheme-relative or backslashed URL, a host or port spelled differently.
+ * Whatever the client makes of them, the other origin must receive nothing,
+ * and the only exception a caller sees is TransportFailure.
+ *
+ * {A} is the configured origin's host:port, {E} the other server's, {PA} and
+ * {PE} their ports.
+ */
+function mcpRedirectLocation(string $template, RedirectLoopback $origin, RedirectLoopback $elsewhere): string
+{
+    return strtr($template, [
+        '{A}' => $origin->host.':'.$origin->port,
+        '{E}' => $elsewhere->host.':'.$elsewhere->port,
+        '{PA}' => (string) $origin->port,
+        '{PE}' => (string) $elsewhere->port,
+    ]);
+}
+
+it('sends nothing to another origin whatever the Location says', function (string $template): void {
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => mcpRedirectLocation($template, $this->origin, $this->elsewhere)]],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($this->elsewhere->requests())->toBe([])
+        ->and($this->elsewhere->received())->not->toContain(MCP_REDIRECT_KEY);
+
+    if ($failure === null) {
+        // The client read the Location as a URL on the configured origin and
+        // followed it there; that is the only success allowed.
+        $requests = $this->origin->requests();
+        expect($requests)->toHaveCount(2)
+            ->and($requests[1]['uri'])->toStartWith('/landed');
+    } else {
+        expect($this->origin->requests())->toHaveCount(1)
+            ->and($failure->getMessage())->not->toContain(MCP_REDIRECT_KEY)
+            ->and($failure->getMessage())->not->toContain(MCP_REDIRECT_TOKEN);
+    }
+})->with([
+    'scheme-relative' => '//{E}/landed',
+    'backslashes after the scheme' => 'http:\\\\{E}/landed',
+    'configured origin as userinfo' => 'http://{A}@{E}/landed',
+    'fragment before the at sign' => 'http://{E}#@{A}/landed',
+    'query before the at sign' => 'http://{E}?@{A}/landed',
+    'backslash before the at sign' => 'http://{E}\\@{A}/landed',
+    'encoded hash before the at sign' => 'http://{E}%23@{A}/landed',
+    'encoded at sign' => 'http://{A}%40{E}/landed',
+    'upper-case scheme to another host' => 'HTTP://{E}/landed',
+    'explicit default port' => 'http://127.0.0.1:80/landed',
+    'explicit default port with a leading zero' => 'http://127.0.0.1:080/landed',
+    'leading zero on the other port' => 'http://127.0.0.2:0{PE}/landed',
+    'trailing-dot host' => 'http://127.0.0.2.:{PE}/landed',
+    'IPv6-mapped address' => 'http://[::ffff:127.0.0.2]:{PE}/landed',
+    'IPv6-mapped address, hex form' => 'http://[::ffff:7f00:2]:{PE}/landed',
+    'https to another host' => 'https://{E}/landed',
+    'a non-http scheme' => 'ftp://{E}/landed',
+    'a file URL' => 'file:///etc/passwd',
+    'port out of range' => 'http://127.0.0.2:99999/landed',
+    'two ports' => 'http://{E}:1/landed',
+    'unclosed IPv6 bracket' => 'http://[::1/landed',
+]);
+
+it('follows a Location that stays on the configured origin', function (string $template): void {
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => mcpRedirectLocation($template, $this->origin, $this->elsewhere)]],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $body = mcpRedirectTransport($this->origin->origin().'/mcp')->send('{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+
+    $requests = $this->origin->requests();
+
+    expect($body)->toBe('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}')
+        ->and($requests)->toHaveCount(2)
+        ->and($requests[1]['uri'])->toBe('/landed')
+        ->and($requests[1]['headers']['X-Api-Key'] ?? null)->toBe(MCP_REDIRECT_KEY)
+        ->and($this->elsewhere->requests())->toBe([]);
+})->with([
+    'relative path' => 'landed',
+    'absolute path' => '/landed',
+    'explicit same port' => 'http://{A}/landed',
+    'upper-case scheme' => 'HTTP://{A}/landed',
+]);
+
+it('follows a Location whose host differs from the configured one only in case', function (): void {
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => 'http://LOCALHOST:'.$this->origin->port.'/landed']],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $body = mcpRedirectTransport('http://LocalHost:'.$this->origin->port.'/mcp')
+        ->send('{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+
+    expect($body)->toBe('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}')
+        ->and($this->origin->requests())->toHaveCount(2);
+});
+
+it('reports a redirect loop as a transport failure', function (): void {
+    $this->origin->answer([['match' => '/mcp', 'status' => 307, 'location' => '/mcp']]);
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($this->origin->requests())->toHaveCount(6)
+        ->and($this->elsewhere->requests())->toBe([]);
+});
+
+it('reports a malformed Location as a transport failure', function (): void {
+    $this->origin->answer([['match' => '/mcp', 'status' => 302, 'location' => 'http://[::1/landed']]);
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($this->origin->requests())->toHaveCount(1);
+});
+
+it('follows no redirect at all when the application turned redirects off', function (string $location): void {
+    app(Factory::class)->globalOptions(['allow_redirects' => false]);
+
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => mcpRedirectLocation($location, $this->origin, $this->elsewhere)]],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($this->origin->requests())->toHaveCount(1)
+        ->and($this->elsewhere->requests())->toBe([]);
+})->with([
+    'same origin' => '/landed',
+    'another origin' => 'http://{E}/landed',
+]);
