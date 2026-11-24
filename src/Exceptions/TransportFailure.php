@@ -27,6 +27,18 @@ class TransportFailure extends McpException
     }
 
     /**
+     * The server answered with a redirect to a different scheme, host or port.
+     * Neither URL is in the message: the configured one may carry a credential.
+     */
+    public static function redirected(string $server): self
+    {
+        return new self(sprintf(
+            'The MCP server [%s] answered with a redirect to a different origin; it was not followed.',
+            $server,
+        ));
+    }
+
+    /**
      * A timeout bounds how long a server may take. This bounds how much it may
      * send — the other half, and the one nothing else covers, because the body
      * is decoded into memory before any tool-level check can look at it.
