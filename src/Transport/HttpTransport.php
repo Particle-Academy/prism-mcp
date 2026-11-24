@@ -8,10 +8,13 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Prism\Mcp\Contracts\Transport;
+use Prism\Mcp\Exceptions\McpException;
 use Prism\Mcp\Exceptions\ProtocolFailure;
 use Prism\Mcp\Exceptions\ServerTimedOut;
 use Prism\Mcp\Exceptions\TransportFailure;
+use RuntimeException;
 
 /**
  * Streamable HTTP, `2026-07-28`.
@@ -99,9 +102,19 @@ class HttpTransport implements Transport
             throw $this->looksLikeTimeout($e)
                 ? ServerTimedOut::after($this->serverLabel, $this->timeoutSeconds, $e)
                 : TransportFailure::unreachable($this->serverLabel, $e->getMessage(), $e);
+        } catch (McpException $e) {
+            // Ours, from the redirect check; already the right type.
+            throw $e;
+        } catch (RuntimeException|InvalidArgumentException $e) {
+            // What the HTTP client throws below Laravel: a Location it cannot
+            // parse, too many redirects, a scheme it will not follow. Callers
+            // catch McpException, so nothing from the client escapes past it.
+            throw TransportFailure::exchange($this->serverLabel, $e);
         }
 
-        if ($response->failed()) {
+        // Anything but a 2xx is not an answer. A 3xx arrives here when the
+        // application turned redirects off, or when it carried no Location.
+        if (! $response->successful()) {
             throw TransportFailure::status($this->serverLabel, $response->status());
         }
 
@@ -125,15 +138,22 @@ class HttpTransport implements Transport
 
     protected function request(): PendingRequest
     {
-        return $this->http
+        $request = $this->http
             ->timeout($this->timeoutSeconds)
-            ->connectTimeout($this->connectTimeoutSeconds)
-            // Followed only while the scheme, host and port stay the same; see
-            // SameOriginRedirects for why the client's own handling is not used.
-            ->withOptions(SameOriginRedirects::options(
+            ->connectTimeout($this->connectTimeoutSeconds);
+
+        // An application that turned redirects off everywhere keeps them off
+        // here. Otherwise they are followed only while the scheme, host and
+        // port stay the same; see SameOriginRedirects for why the client's own
+        // handling is not used.
+        if (($request->getOptions()['allow_redirects'] ?? null) !== false) {
+            $request->withOptions(SameOriginRedirects::options(
                 $this->url,
                 fn (): TransportFailure => TransportFailure::redirected($this->serverLabel),
-            ))
+            ));
+        }
+
+        return $request
             ->withHeaders([
                 // Both, in this order. A `2026-07-28` server answers either, and
                 // announcing only JSON would refuse a server that legitimately
