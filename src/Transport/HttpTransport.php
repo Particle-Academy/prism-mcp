@@ -128,6 +128,12 @@ class HttpTransport implements Transport
         return $this->http
             ->timeout($this->timeoutSeconds)
             ->connectTimeout($this->connectTimeoutSeconds)
+            // Followed only while the scheme, host and port stay the same; see
+            // SameOriginRedirects for why the client's own handling is not used.
+            ->withOptions(SameOriginRedirects::options(
+                $this->url,
+                fn (): TransportFailure => TransportFailure::redirected($this->serverLabel),
+            ))
             ->withHeaders([
                 // Both, in this order. A `2026-07-28` server answers either, and
                 // announcing only JSON would refuse a server that legitimately
