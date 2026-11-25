@@ -268,3 +268,24 @@ it('follows no redirect at all when the application turned redirects off', funct
     'same origin' => '/landed',
     'another origin' => 'http://{E}/landed',
 ]);
+
+it('follows no redirect when the application set redirects to any empty value', function (mixed $setting): void {
+    // The HTTP client treats every empty value as off, and Laravel's
+    // maxRedirects(0) writes a zero max; each one is the application saying no.
+    app(Factory::class)->globalOptions(['allow_redirects' => $setting]);
+
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => '/landed']],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($this->origin->requests())->toHaveCount(1);
+})->with([
+    'zero' => [0],
+    'empty string' => [''],
+    'null' => [null],
+    'zero max' => [['max' => 0]],
+]);
