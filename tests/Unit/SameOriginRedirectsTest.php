@@ -62,4 +62,7 @@ it('reads an allow_redirects setting the way the HTTP client does, and never abo
     'string max three' => [['max' => '3'], 3],
     'max five' => [['max' => 5], 5],
     'max fifty' => [['max' => 50], 5],
+    'string max with a leading space' => [['max' => ' 3'], null],
+    'string max with a trailing newline' => [['max' => "3\n"], null],
+    'string max past the integer range' => [['max' => '99999999999999999999'], 5],
 ]);
