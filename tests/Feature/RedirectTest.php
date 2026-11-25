@@ -281,8 +281,12 @@ it('follows no redirect when the application set redirects to any empty value', 
 
     $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
 
+    // Guzzle 7 sends the first request and stops at the 307. Guzzle 8 rejects
+    // `0` and `''` as option values before sending anything. Either way no
+    // redirect is followed.
     expect($failure)->toBeInstanceOf(TransportFailure::class)
-        ->and($this->origin->requests())->toHaveCount(1);
+        ->and(count($this->origin->requests()))->toBeLessThanOrEqual(1)
+        ->and(array_column($this->origin->requests(), 'uri'))->not->toContain('/landed');
 })->with([
     'zero' => [0],
     'empty string' => [''],
