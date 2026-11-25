@@ -293,3 +293,79 @@ it('follows no redirect when the application set redirects to any empty value', 
     'null' => [null],
     'zero max' => [['max' => 0]],
 ]);
+
+it('follows no redirect when the application setting is one the HTTP client would not follow', function (mixed $setting): void {
+    // The HTTP client follows nothing for these: some it treats as off, the
+    // rest it rejects or stops at the first hop. None of them may be widened
+    // into following a same-origin redirect.
+    app(Factory::class)->globalOptions(['allow_redirects' => $setting]);
+
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => '/landed']],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($this->origin->requests())->toHaveCount(1)
+        ->and(array_column($this->origin->requests(), 'uri'))->not->toContain('/landed');
+})->with([
+    'false' => [false],
+    'string false' => ['false'],
+    'string zero' => ['0'],
+    'integer one' => [1],
+    'empty array' => [[]],
+    'zero max' => [['max' => 0]],
+    'null max' => [['max' => null]],
+    'negative max' => [['max' => -1]],
+    'string zero max' => [['max' => '0']],
+    'false max' => [['max' => false]],
+    'true max' => [['max' => true]],
+    'text max' => [['max' => 'abc']],
+    'fractional max' => [['max' => 1.5]],
+    'string negative max' => [['max' => '-1']],
+]);
+
+it('follows no more hops than the application allows', function (): void {
+    app(Factory::class)->globalOptions(['allow_redirects' => ['max' => 1]]);
+
+    $this->origin->answer(
+        [
+            ['match' => '/mcp', 'status' => 307, 'location' => '/one'],
+            ['match' => '/one', 'status' => 307, 'location' => '/two'],
+        ],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and(array_column($this->origin->requests(), 'uri'))->toBe(['/mcp', '/one']);
+});
+
+it('keeps the application redirect hook, after the origin check', function (): void {
+    $seen = [];
+    app(Factory::class)->globalOptions(['allow_redirects' => [
+        'max' => 5,
+        'on_redirect' => function (mixed $request, mixed $response, Stringable $next) use (&$seen): void {
+            $seen[] = (string) $next;
+        },
+    ]]);
+
+    $this->origin->answer(
+        [
+            ['match' => '/mcp', 'status' => 307, 'location' => '/landed'],
+            ['match' => '/landed', 'status' => 307, 'location' => $this->elsewhere->origin().'/away'],
+        ],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    // The same-origin hop reaches the hook; the cross-origin one is refused
+    // before the hook sees it, and before anything is sent there.
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and($seen)->toBe([$this->origin->origin().'/landed'])
+        ->and($this->elsewhere->requests())->toBe([]);
+});

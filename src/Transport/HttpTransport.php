@@ -110,11 +110,14 @@ class HttpTransport implements Transport
         } catch (McpException $e) {
             // Ours, from the redirect check; already the right type.
             throw $e;
-        } catch (RuntimeException|InvalidArgumentException $e) {
+        } catch (RuntimeException|InvalidArgumentException) {
             // What the HTTP client throws below Laravel that is not a
-            // ConnectionException: a Location it cannot parse. Callers catch
-            // McpException, so nothing from the client escapes past it.
-            throw TransportFailure::exchange($this->serverLabel, $e);
+            // ConnectionException: a Location or configured URL it cannot
+            // parse, a header value it will not send. Callers catch
+            // McpException, so nothing from the client escapes past it, and
+            // the client's exception is not kept: its message can carry the
+            // configured URL or a header value verbatim.
+            throw TransportFailure::exchange($this->serverLabel);
         }
 
         // Anything but a 2xx is not an answer. A 3xx arrives here when the
@@ -148,15 +151,23 @@ class HttpTransport implements Transport
             ->connectTimeout($this->connectTimeoutSeconds);
 
         // An application that turned redirects off everywhere keeps them off
-        // here. Otherwise they are followed only while the scheme, host and
+        // here, and one that allows fewer hops keeps its lower limit.
+        // Otherwise redirects are followed only while the scheme, host and
         // port stay the same; see SameOriginRedirects for why the client's own
-        // handling is not used.
-        if (! $this->redirectsTurnedOff($request->getOptions())) {
-            $request->withOptions(SameOriginRedirects::options(
+        // handling is not used. No setting is absent: the HTTP client's default
+        // follows redirects.
+        $options = $request->getOptions();
+        $setting = array_key_exists('allow_redirects', $options) ? $options['allow_redirects'] : true;
+        $hops = SameOriginRedirects::hopLimit($setting);
+
+        $request->withOptions($hops === null
+            ? ['allow_redirects' => false]
+            : SameOriginRedirects::options(
                 $this->url,
                 fn (): TransportFailure => TransportFailure::redirected($this->serverLabel),
+                $hops,
+                is_array($setting) ? ($setting['on_redirect'] ?? null) : null,
             ));
-        }
 
         return $request
             ->withHeaders([
@@ -166,31 +177,6 @@ class HttpTransport implements Transport
                 'Accept' => 'application/json, text/event-stream',
                 ...$this->headers,
             ]);
-    }
-
-    /**
-     * Whether the application's own options already turn redirects off.
-     *
-     * The HTTP client treats any empty `allow_redirects` (false, 0, '', null)
-     * as off, and an array with an empty `max` (Laravel's maxRedirects(0)) as
-     * off too. Each of those is kept; only an absent setting or one that
-     * follows redirects is narrowed to the same origin.
-     *
-     * @param  array<string, mixed>  $options
-     */
-    protected function redirectsTurnedOff(array $options): bool
-    {
-        if (! array_key_exists('allow_redirects', $options)) {
-            return false;
-        }
-
-        $setting = $options['allow_redirects'];
-
-        if (empty($setting)) {
-            return true;
-        }
-
-        return is_array($setting) && array_key_exists('max', $setting) && empty($setting['max']);
     }
 
     /**
