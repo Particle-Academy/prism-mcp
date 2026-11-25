@@ -39,6 +39,20 @@ class TransportFailure extends McpException
     }
 
     /**
+     * The HTTP client gave up on the exchange: a Location it could not parse,
+     * a scheme it would not follow, too many redirects. The client's message
+     * stays on the previous exception only, because it can carry a URL.
+     */
+    public static function exchange(string $server, Throwable $previous): self
+    {
+        return new self(
+            sprintf('The MCP server [%s] could not be read: the HTTP exchange failed.', $server),
+            0,
+            $previous,
+        );
+    }
+
+    /**
      * A timeout bounds how long a server may take. This bounds how much it may
      * send — the other half, and the one nothing else covers, because the body
      * is decoded into memory before any tool-level check can look at it.
