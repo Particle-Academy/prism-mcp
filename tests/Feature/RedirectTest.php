@@ -268,3 +268,28 @@ it('follows no redirect at all when the application turned redirects off', funct
     'same origin' => '/landed',
     'another origin' => 'http://{E}/landed',
 ]);
+
+it('follows no redirect when the application set redirects to any empty value', function (mixed $setting): void {
+    // The HTTP client treats every empty value as off, and Laravel's
+    // maxRedirects(0) writes a zero max; each one is the application saying no.
+    app(Factory::class)->globalOptions(['allow_redirects' => $setting]);
+
+    $this->origin->answer(
+        [['match' => '/mcp', 'status' => 307, 'location' => '/landed']],
+        body: '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+    );
+
+    $failure = mcpSendCatching(mcpRedirectTransport($this->origin->origin().'/mcp'));
+
+    // Guzzle 7 sends the first request and stops at the 307. Guzzle 8 rejects
+    // `0` and `''` as option values before sending anything. Either way no
+    // redirect is followed.
+    expect($failure)->toBeInstanceOf(TransportFailure::class)
+        ->and(count($this->origin->requests()))->toBeLessThanOrEqual(1)
+        ->and(array_column($this->origin->requests(), 'uri'))->not->toContain('/landed');
+})->with([
+    'zero' => [0],
+    'empty string' => [''],
+    'null' => [null],
+    'zero max' => [['max' => 0]],
+]);
