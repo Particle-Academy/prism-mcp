@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Prism\Mcp\Exceptions;
 
-use Throwable;
-
 class TransportFailure extends McpException
 {
     /**
@@ -44,17 +42,18 @@ class TransportFailure extends McpException
     }
 
     /**
-     * The HTTP client could not parse a Location the server sent. The client's
-     * message stays on the previous exception only; it carries the server's
-     * Location text, never the configured URL or the request.
+     * The HTTP client refused the exchange: a Location it could not parse, a
+     * configured URL it could not parse, a header value it would not send. The
+     * message is fixed and nothing is chained: the client's message can carry
+     * the configured URL with its password and query string, or a header value
+     * such as a bearer token, verbatim.
      */
-    public static function exchange(string $server, Throwable $previous): self
+    public static function exchange(string $server): self
     {
-        return new self(
-            sprintf('The MCP server [%s] could not be read: the HTTP exchange failed.', $server),
-            0,
-            $previous,
-        );
+        return new self(sprintf(
+            'The MCP server [%s] could not be read: the HTTP exchange failed.',
+            $server,
+        ));
     }
 
     /**

@@ -384,15 +384,26 @@ tools to another the moment a server forgot the label. The key carries a hash,
 never the credential — cache keys end up in logs.
 
 **A failed connection does not repeat the URL.** The HTTP client's message for a
-refused connection or a timeout ends with the configured URL, query string
-included, and its exception holds the request with its headers. `ServerTimedOut`
-and `TransportFailure` carry a fixed message and chain neither, so a credential
-in the URL or a header does not reach a log through them.
+refused connection, a timeout, a URL it cannot parse or a header value it will
+not send can carry the configured URL (password and query string included) or
+the header value verbatim, and its exception holds the request with its
+headers. `ServerTimedOut` and `TransportFailure` carry a fixed message and chain
+no client exception, so a credential in the URL or a header does not reach a
+log through them.
+
+Put credentials in headers (`withToken()`, `headers`), not in the URL's query
+string. Before this package sees a failed connection, Laravel dispatches its own
+`ConnectionFailed` event, and that event carries the URL and the request; any
+listener (Telescope, Pulse, an application's own) sees both.
 
 **Redirects stay on the configured origin.** A redirect is followed only while
-the scheme, host and port stay the same. An application that turned redirects
-off (`allow_redirects` set to any empty value, or `maxRedirects(0)`) keeps them
-off here too.
+the scheme, host and port stay the same, for at most five hops. The
+application's `allow_redirects` setting is read the way the HTTP client reads it
+and never widened: `false`, any other value that is not `true` or an array, an
+empty array, and a `max` that is not a positive whole number (including
+Laravel's `maxRedirects(0)`) all mean no redirect is followed; a smaller `max`
+is kept; an application `on_redirect` hook still runs, for hops that stayed on
+the origin.
 
 ---
 
