@@ -96,19 +96,24 @@ class HttpTransport implements Transport
                 ->withBody($payload, 'application/json')
                 ->post($this->url);
         } catch (ConnectionException $e) {
-            // Laravel folds both into ConnectionException. They want different
-            // handling by the caller — one is retryable, one usually is not —
-            // so they are separated here rather than downstream.
+            // Laravel folds a timeout, a refused connection, and a redirect the
+            // client would not complete (too many hops, a non-http scheme) into
+            // ConnectionException. A timeout is retryable and the rest usually
+            // are not, so the two are separated here rather than downstream.
+            //
+            // Neither keeps the client's exception or its message: the message
+            // ends with the configured URL, query string included, and the
+            // exception holds the full request, headers included.
             throw $this->looksLikeTimeout($e)
-                ? ServerTimedOut::after($this->serverLabel, $this->timeoutSeconds, $e)
-                : TransportFailure::unreachable($this->serverLabel, $e->getMessage(), $e);
+                ? ServerTimedOut::after($this->serverLabel, $this->timeoutSeconds)
+                : TransportFailure::unreachable($this->serverLabel);
         } catch (McpException $e) {
             // Ours, from the redirect check; already the right type.
             throw $e;
         } catch (RuntimeException|InvalidArgumentException $e) {
-            // What the HTTP client throws below Laravel: a Location it cannot
-            // parse, too many redirects, a scheme it will not follow. Callers
-            // catch McpException, so nothing from the client escapes past it.
+            // What the HTTP client throws below Laravel that is not a
+            // ConnectionException: a Location it cannot parse. Callers catch
+            // McpException, so nothing from the client escapes past it.
             throw TransportFailure::exchange($this->serverLabel, $e);
         }
 
@@ -146,7 +151,7 @@ class HttpTransport implements Transport
         // here. Otherwise they are followed only while the scheme, host and
         // port stay the same; see SameOriginRedirects for why the client's own
         // handling is not used.
-        if (($request->getOptions()['allow_redirects'] ?? null) !== false) {
+        if (! $this->redirectsTurnedOff($request->getOptions())) {
             $request->withOptions(SameOriginRedirects::options(
                 $this->url,
                 fn (): TransportFailure => TransportFailure::redirected($this->serverLabel),
@@ -161,6 +166,31 @@ class HttpTransport implements Transport
                 'Accept' => 'application/json, text/event-stream',
                 ...$this->headers,
             ]);
+    }
+
+    /**
+     * Whether the application's own options already turn redirects off.
+     *
+     * The HTTP client treats any empty `allow_redirects` (false, 0, '', null)
+     * as off, and an array with an empty `max` (Laravel's maxRedirects(0)) as
+     * off too. Each of those is kept; only an absent setting or one that
+     * follows redirects is narrowed to the same origin.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    protected function redirectsTurnedOff(array $options): bool
+    {
+        if (! array_key_exists('allow_redirects', $options)) {
+            return false;
+        }
+
+        $setting = $options['allow_redirects'];
+
+        if (empty($setting)) {
+            return true;
+        }
+
+        return is_array($setting) && array_key_exists('max', $setting) && empty($setting['max']);
     }
 
     /**

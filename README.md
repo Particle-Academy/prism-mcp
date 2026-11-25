@@ -383,6 +383,17 @@ that `cacheScope: private`; keying on the URL alone would serve one principal's
 tools to another the moment a server forgot the label. The key carries a hash,
 never the credential — cache keys end up in logs.
 
+**A failed connection does not repeat the URL.** The HTTP client's message for a
+refused connection or a timeout ends with the configured URL, query string
+included, and its exception holds the request with its headers. `ServerTimedOut`
+and `TransportFailure` carry a fixed message and chain neither, so a credential
+in the URL or a header does not reach a log through them.
+
+**Redirects stay on the configured origin.** A redirect is followed only while
+the scheme, host and port stay the same. An application that turned redirects
+off (`allow_redirects` set to any empty value, or `maxRedirects(0)`) keeps them
+off here too.
+
 ---
 
 ## Gating

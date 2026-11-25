@@ -8,13 +8,18 @@ use Throwable;
 
 class TransportFailure extends McpException
 {
-    public static function unreachable(string $server, string $detail, ?Throwable $previous = null): self
+    /**
+     * The connection failed, or the HTTP client would not complete a redirect
+     * (too many hops, a non-http scheme). The message is fixed and nothing is
+     * chained: the client's message ends with the configured URL, query string
+     * included, and its exception holds the full request, headers included.
+     */
+    public static function unreachable(string $server): self
     {
-        return new self(
-            sprintf('The MCP server [%s] could not be reached: %s', $server, $detail),
-            0,
-            $previous,
-        );
+        return new self(sprintf(
+            'The MCP server [%s] could not be reached, or the HTTP exchange did not complete.',
+            $server,
+        ));
     }
 
     public static function status(string $server, int $status): self
@@ -39,9 +44,9 @@ class TransportFailure extends McpException
     }
 
     /**
-     * The HTTP client gave up on the exchange: a Location it could not parse,
-     * a scheme it would not follow, too many redirects. The client's message
-     * stays on the previous exception only, because it can carry a URL.
+     * The HTTP client could not parse a Location the server sent. The client's
+     * message stays on the previous exception only; it carries the server's
+     * Location text, never the configured URL or the request.
      */
     public static function exchange(string $server, Throwable $previous): self
     {
